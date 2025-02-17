@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Simulador de Gerência de Processos (Responsivo)</title>
+    <title>Simulador de Processos - Round Robin + I/O (Tutorial Completo)</title>
     <!-- Tailwind CSS -->
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
 
@@ -99,10 +99,11 @@
         <!-- Cabeçalho -->
         <header class="mb-6 text-center">
             <h1 class="text-3xl font-bold mb-2">
-                Simulador de Gerência de Processos (Responsivo)
+                Simulador de Processos: Round Robin + I/O
             </h1>
             <p class="text-sm text-gray-700 mb-2">
-                Crie processos, observe sua execução e gerenciamento de memória, agora adaptado para telas menores!
+                Visualize criação, execução, espera de I/O, suspensão e finalização de processos. <br>
+                Escalonamento com Round Robin (quantum = 3) e fila circular real.
             </p>
             <!-- Botão que abre o modal de tutorial -->
             <button id="openTutorialBtn" class="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-2 rounded"
@@ -124,7 +125,7 @@
                 <div>
                     <label for="processType" class="block text-sm font-medium mb-1">Tipo de Processo</label>
                     <select id="processType" class="p-2 border rounded w-52"
-                        title="Selecione o tipo de processo (CPU-bound, I/O-bound, disco, fita, etc.).">
+                        title="Selecione o tipo de processo (CPU-bound, I/O-bound, etc.).">
                         <option value="CPU-bound">CPU-bound</option>
                         <option value="I/O-bound (disco)">I/O-bound (disco)</option>
                         <option value="I/O-bound (fita)">I/O-bound (fita)</option>
@@ -143,14 +144,27 @@
                     Criar
                 </button>
             </form>
-            <p class="text-xs text-gray-500 mt-2">
-                * Exemplos: <strong>CPU-bound</strong> gasta muito tempo de CPU. <strong>I/O-bound</strong> pode entrar
-                em espera (E/S).
-            </p>
+
+            <!-- Sumário de Tipos de Processo (didático) -->
+            <div class="mt-4 bg-gray-50 p-3 rounded border text-sm">
+                <h3 class="font-bold mb-2">Sumário de Tipos de Processo</h3>
+                <ul class="list-disc ml-4 space-y-1">
+                    <li><strong>CPU-bound</strong>: Gasta a maior parte do tempo usando CPU, raramente faz I/O.</li>
+                    <li><strong>I/O-bound (disco, fita, terminal)</strong>: Processos que realizam muitas operações de
+                        E/S, podendo entrar em <em>Espera(I/O)</em> frequentemente.</li>
+                    <li><strong>CPU e I/O-bound</strong>: Combinação: parte do tempo gasta em CPU, parte do tempo em
+                        E/S.</li>
+                </ul>
+                <p class="mt-2 text-xs text-gray-600">
+                    Experimente criar processos de tipos diferentes para observar como <em>I/O-bound</em> entram em
+                    espera e como <em>CPU-bound</em> ficam mais tempo em execução.
+                    Veja também as combinações, como <em>CPU e I/O-bound (disco)</em>, que alternam entre usar CPU e
+                    entrar em E/S.
+                </p>
+            </div>
         </section>
 
         <!-- Grid principal (Processos, CPU, Memória) -->
-        <!-- Em telas maiores, 3 colunas. Em telas menores, 1 coluna (empilhado) -->
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
 
             <!-- Gerência de Processos -->
@@ -163,7 +177,6 @@
                     </svg>
                     Gerência de Processos
                 </h2>
-                <!-- overflow-x-auto para permitir rolagem horizontal se a tabela for grande -->
                 <div class="w-full overflow-x-auto">
                     <table class="min-w-full text-sm border">
                         <thead>
@@ -172,6 +185,7 @@
                                 <th class="border px-2 py-1">Tipo</th>
                                 <th class="border px-2 py-1">Prio</th>
                                 <th class="border px-2 py-1">Estado</th>
+                                <th class="border px-2 py-1">Tempo I/O</th>
                                 <th class="border px-2 py-1">Ação</th>
                             </tr>
                         </thead>
@@ -226,9 +240,25 @@
                 </div>
 
                 <p class="text-sm text-gray-600">
-                    * Round Robin (quantum = 3). Processos <em>I/O-bound</em> podem entrar em espera (I/O)
-                    aleatoriamente (~30%).
+                    * Round Robin (quantum = 3) com fila circular. Processos <em>I/O-bound</em> podem entrar em espera
+                    (I/O) aleatoriamente.
                 </p>
+
+                <!-- Visualização das filas (opcional) -->
+                <div class="mt-4">
+                    <h3 class="font-bold mb-2">Estado do Escalonador</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                        <div class="bg-gray-50 p-2 rounded border">
+                            <p class="font-semibold">Em Execução:</p>
+                            <p id="execInfo">-</p>
+                        </div>
+                        <div class="bg-gray-50 p-2 rounded border">
+                            <p class="font-semibold">Fila Pronto (Round Robin):</p>
+                            <ul id="readyQueueList" class="list-disc ml-4"></ul>
+                        </div>
+                    </div>
+                </div>
+
             </section>
 
             <!-- Gerência de Memória -->
@@ -243,7 +273,6 @@
                     </svg>
                     Gerência de Memória
                 </h2>
-                <!-- Scroll horizontal se precisar (em telas bem pequenas) -->
                 <div class="inline-block">
                     <div class="grid grid-cols-10 gap-1 text-center text-xs" id="memoryGrid">
                         <!-- Preenchido dinamicamente via JS -->
@@ -278,21 +307,58 @@
 
         <!-- Conteúdo do modal -->
         <div class="relative bg-white w-11/12 max-w-2xl mx-auto p-6 rounded shadow-lg">
-            <h2 class="text-2xl font-bold mb-4">Tutorial Rápido</h2>
-            <ol class="list-decimal list-inside space-y-2 text-sm text-gray-700">
+            <h2 class="text-2xl font-bold mb-4">Tutorial Completo</h2>
+            <ol class="list-decimal list-inside space-y-3 text-sm text-gray-700">
                 <li><strong>Criar um Processo</strong>: Selecione <em>Tipo</em>, defina <em>Prioridade</em> e clique em
-                    <strong>Criar</strong>. Cada processo criado ocupa 5 frames na memória.</li>
-                <li><strong>Estados de Processos</strong>: A tabela mostra PID, Tipo, Prioridade e Estado atual (Pronto,
-                    Executando, Espera, Suspenso ou Finalizado). A legenda ao lado explica as cores.</li>
-                <li><strong>Escalonamento Round Robin</strong>: Use <em>Avançar Clock</em> para simular 1 unidade de
-                    tempo. O processo em execução consome CPU. Após 3 passos (quantum = 3), outro processo é escalonado.
+                    <strong>Criar</strong>. Cada processo ocupa 5 frames na memória.
                 </li>
-                <li><strong>I/O-bound</strong>: Pode entrar em <em>Espera(I/O)</em> (~30% de chance a cada passo).</li>
-                <li><strong>Suspender</strong>: Força o processo a ficar em estado <em>Suspenso</em>.
-                    <strong>Prosseguir</strong> o traz de volta para <em>Pronto</em>.</li>
-                <li><strong>Finalizar</strong>: Termina o processo e libera seus frames de memória.</li>
+
+                <li><strong>Tipos de Processos</strong>:
+                    <ul class="list-disc ml-5 mt-1">
+                        <li><em>CPU-bound</em>: usa muito tempo de CPU, quase não faz E/S.</li>
+                        <li><em>I/O-bound</em>: faz muitas operações de E/S (disco, fita, terminal...), podendo entrar
+                            em <em>Espera(I/O)</em> várias vezes.</li>
+                        <li><em>CPU e I/O-bound</em>: alterna entre CPU e E/S, comportamento misto.</li>
+                    </ul>
+                    Tente criar vários processos de cada tipo para ver as diferenças no escalonamento.
+                </li>
+
+                <li><strong>Round Robin (Fila Circular)</strong>: Mantemos uma fila de processos <em>Pronto</em>. Cada
+                    processo ganha 3 steps (quantum=3). Se não terminar ou não entrar em I/O, volta ao final da fila.
+                </li>
+
+                <li><strong>Fila Pronto</strong>: Veja em “Estado do Escalonador” quem está em <em>Execução</em> e a
+                    ordem da fila. Com 3+ processos, observe como eles se revezam.</li>
+
+                <li><strong>I/O-bound</strong>: ~30% de chance de entrar em <em>Espera(I/O)</em> a cada passo de CPU.
+                    Ele fica lá por um tempo (3 a 8 clocks) antes de voltar a <em>Pronto</em>.</li>
+
+                <li><strong>Suspender</strong>: Move o processo para <em>Suspenso</em>, tirando-o da fila (ou da CPU).
+                    <strong>Prosseguir</strong> o traz de volta para <em>Pronto</em>.
+                </li>
+
+                <li><strong>Finalizar</strong>: Termina o processo, libera seus frames de memória, remove-o da fila.
+                    Você pode ver o evento no Log e a memória piscando (blink) ao liberar frames.</li>
+
                 <li><strong>Modo Automático</strong>: Clique em <em>Auto (liga/desliga)</em> para avançar o clock
-                    automaticamente a cada 1 segundo.</li>
+                    automaticamente a cada 1 segundo. Em modo manual, use <em>Avançar Clock</em> para passo a passo.
+                </li>
+
+                <li><strong>Sugestões de Experimentos</strong>:
+                    <ul class="list-disc ml-5 mt-1">
+                        <li>Criar 1 processo CPU-bound e 2 processos I/O-bound. Veja como o CPU-bound permanece mais
+                            tempo executando (quando não há E/S). Observe os I/O-bound indo para Espera(I/O) e voltando
+                            para Pronto.</li>
+                        <li>Criar 4 processos “CPU e I/O-bound” e ver como eles alternam CPU e E/S de forma
+                            imprevisível.</li>
+                        <li>Suspender um processo em execução e retomar depois para ver a mudança de estado.</li>
+                        <li>Finalizar processos para liberar memória e observar os frames piscando.</li>
+                    </ul>
+                </li>
+
+                <li><strong>Outros Algoritmos</strong>: Se quiser testar <em>FCFS, SJF, Prioridade</em>, basta adaptar a
+                    forma como a fila é organizada (ex.: remover o quantum ou ordenar por prioridade/tempo restante).
+                </li>
             </ol>
             <button id="closeTutorialBtn" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
                 Fechar
@@ -314,6 +380,8 @@
         const logDiv = document.getElementById('log');
         const clockValue = document.getElementById('clockValue');
         const currentExec = document.getElementById('currentExec');
+        const execInfo = document.getElementById('execInfo');
+        const readyQueueList = document.getElementById('readyQueueList');
 
         // Botões / Modal
         const stepBtn = document.getElementById('stepBtn');
@@ -325,7 +393,7 @@
         // Pop-up (balãozinho)
         const eventPopUp = document.getElementById('eventPopUp');
 
-        // Seções que podemos destacar
+        // Seções para pop-ups
         const processSection = document.getElementById('processSection');
         const cpuSection = document.getElementById('cpuSection');
         const memorySection = document.getElementById('memorySection');
@@ -344,6 +412,9 @@
 
         // Round Robin
         const quantum = 3;
+
+        // Fila circular de PIDs que estão em "Pronto"
+        let readyQueue = [];
 
         // Processo em execução
         let runningProcess = null;
@@ -391,13 +462,18 @@
                 priority: priority,
                 state: 'Pronto',
                 cpuTime: 0,
-                remainingQuantum: quantum
+                remainingQuantum: quantum,
+                ioWaitTime: 0  // tempo de espera de I/O
             };
             processes.push(newProcess);
+
+            // Adiciona o processo na fila de pronto
+            addToReadyQueue(newProcess.pid);
 
             addLog(`Processo P${newProcess.pid} criado (Tipo: ${type}, Prioridade: ${priority}).`);
             showPopUpAtElement(processSection, `Processo P${newProcess.pid} criado! Veja na tabela.`, 3000);
             renderProcesses();
+            renderReadyQueue();
         });
 
         // --------------------------------------------------
@@ -466,13 +542,40 @@
         }
 
         // --------------------------------------------------
+        // Round Robin - Gerenciamento da Fila
+        // --------------------------------------------------
+        function addToReadyQueue(pid) {
+            readyQueue.push(pid);
+        }
+
+        function removeFromReadyQueue(pid) {
+            const index = readyQueue.indexOf(pid);
+            if (index !== -1) {
+                readyQueue.splice(index, 1);
+            }
+        }
+
+        // Exibe a fila de pronto
+        function renderReadyQueue() {
+            readyQueueList.innerHTML = '';
+            if (readyQueue.length === 0) {
+                readyQueueList.innerHTML = '<li>Nenhum</li>';
+                return;
+            }
+            readyQueue.forEach(pid => {
+                const li = document.createElement('li');
+                li.textContent = `P${pid}`;
+                readyQueueList.appendChild(li);
+            });
+        }
+
+        // --------------------------------------------------
         // Renderização da Tabela de Processos
         // --------------------------------------------------
         function renderProcesses() {
             processTable.innerHTML = '';
             processes.forEach(p => {
                 const row = document.createElement('tr');
-
                 let stateClass = getStateColor(p.state);
 
                 row.innerHTML = `
@@ -480,6 +583,7 @@
           <td class="border px-2 py-1">${p.type}</td>
           <td class="border px-2 py-1">${p.priority}</td>
           <td class="border px-2 py-1 ${stateClass}">${p.state}</td>
+          <td class="border px-2 py-1">${p.ioWaitTime > 0 ? p.ioWaitTime : '-'}</td>
           <td class="border px-2 py-1">
             ${renderButtons(p)}
           </td>
@@ -551,15 +655,22 @@
             const proc = processes.find(x => x.pid === pid);
             if (!proc || proc.state === 'Finalizado') return;
             if (proc.state !== 'Suspenso') {
+                // Se estava em execução, removemos "runningProcess"
+                if (runningProcess && runningProcess.pid === pid) {
+                    runningProcess = null;
+                }
+                // Se estava em pronto, removemos da fila
+                if (proc.state === 'Pronto') {
+                    removeFromReadyQueue(pid);
+                }
                 proc.state = 'Suspenso';
                 proc.__justChanged = true;
                 addLog(`Processo P${proc.pid} foi SUSPENSO.`);
                 showPopUpAtElement(processSection, `P${proc.pid} agora está em 'Suspenso'`, 3000);
-                if (runningProcess && runningProcess.pid === pid) {
-                    runningProcess = null;
-                }
             }
             renderProcesses();
+            renderReadyQueue();
+            renderCurrentExec();
         }
 
         function resumeProcess(pid) {
@@ -568,24 +679,35 @@
             if (proc.state === 'Suspenso') {
                 proc.state = 'Pronto';
                 proc.__justChanged = true;
+                addToReadyQueue(pid);
                 addLog(`Processo P${proc.pid} voltou para PRONTO.`);
                 showPopUpAtElement(processSection, `P${proc.pid} está PRONTO novamente.`, 3000);
             }
             renderProcesses();
+            renderReadyQueue();
+            renderCurrentExec();
         }
 
         function finishProcess(pid) {
             const proc = processes.find(x => x.pid === pid);
             if (!proc || proc.state === 'Finalizado') return;
+
+            // Se está executando, libera a CPU
+            if (runningProcess && runningProcess.pid === pid) {
+                runningProcess = null;
+            }
+            // Remove da fila de pronto se lá estiver
+            removeFromReadyQueue(pid);
+
             proc.state = 'Finalizado';
             proc.__justChanged = true;
             addLog(`Processo P${proc.pid} foi FINALIZADO.`);
             showPopUpAtElement(processSection, `P${proc.pid} foi finalizado.`, 3000);
             freeFrames(pid);
-            if (runningProcess && runningProcess.pid === pid) {
-                runningProcess = null;
-            }
+
             renderProcesses();
+            renderReadyQueue();
+            renderCurrentExec();
         }
 
         // --------------------------------------------------
@@ -609,6 +731,21 @@
             clock++;
             clockValue.textContent = clock;
 
+            // Atualiza processos em I/O (decrementa ioWaitTime)
+            processes.forEach(p => {
+                if (p.state === 'Espera(I/O)' && p.ioWaitTime > 0) {
+                    p.ioWaitTime--;
+                    if (p.ioWaitTime <= 0) {
+                        // Voltou para PRONTO
+                        p.state = 'Pronto';
+                        p.__justChanged = true;
+                        addToReadyQueue(p.pid);
+                        addLog(`P${p.pid} concluiu I/O e voltou a PRONTO.`);
+                        showPopUpAtElement(processSection, `P${p.pid} voltou de I/O para PRONTO.`, 3000);
+                    }
+                }
+            });
+
             // Se não temos processo rodando ou acabou o quantum
             if (!runningProcess || runningProcess.state !== 'Executando' || runningProcess.remainingQuantum <= 0) {
                 scheduleNextProcess();
@@ -620,66 +757,66 @@
                 runningProcess.remainingQuantum--;
                 addLog(`Clock ${clock}: P${runningProcess.pid} executou 1 step (CPU-time=${runningProcess.cpuTime}).`);
 
-                // Se for I/O-bound (verificamos se tem "I/O-bound" na string)
+                // Se for I/O-bound, ~30% de chance de entrar em I/O
                 if (isIOBound(runningProcess.type)) {
-                    // ~30% de chance de ir para espera
                     if (Math.random() < 0.3) {
+                        // Sorteia tempo de espera entre 3 e 8
+                        runningProcess.ioWaitTime = Math.floor(Math.random() * 6) + 3;
                         runningProcess.state = 'Espera(I/O)';
                         runningProcess.__justChanged = true;
-                        addLog(`P${runningProcess.pid} entrou em Espera (I/O).`);
+                        addLog(`P${runningProcess.pid} entrou em Espera (I/O) por ${runningProcess.ioWaitTime} clocks.`);
                         showPopUpAtElement(cpuSection, `P${runningProcess.pid} entrou em I/O!`, 3000);
                         runningProcess = null;
                     }
                 }
             }
 
-            // Processos em Espera(I/O) podem voltar a Pronto (~30% de chance)
-            processes.forEach(p => {
-                if (p.state === 'Espera(I/O)') {
-                    if (Math.random() < 0.3) {
-                        p.state = 'Pronto';
-                        p.remainingQuantum = quantum;
-                        p.__justChanged = true;
-                        addLog(`P${p.pid} concluiu I/O e voltou a PRONTO.`);
-                        showPopUpAtElement(processSection, `P${p.pid} voltou de I/O para PRONTO.`, 3000);
-                    }
-                }
-            });
-
             renderProcesses();
+            renderReadyQueue();
             renderCurrentExec();
         }
 
         function scheduleNextProcess() {
-            // Se existe um processo rodando que ainda estava "Executando", volta pra "Pronto"
+            // Se existe um processo rodando que ainda estava "Executando" e não foi para I/O nem finalizou, volta pra fila
             if (runningProcess && runningProcess.state === 'Executando') {
-                runningProcess.state = 'Pronto';
-                runningProcess.__justChanged = true;
+                // quantum acabou
+                removeFromReadyQueue(runningProcess.pid);
+                // Se o processo não finalizou ou não entrou em I/O, volta pra "Pronto"
+                if (runningProcess.state === 'Executando') {
+                    runningProcess.state = 'Pronto';
+                    runningProcess.__justChanged = true;
+                    addToReadyQueue(runningProcess.pid);
+                }
+                runningProcess = null;
             }
 
-            // Pega todos os processos em estado "Pronto"
-            const readyProcs = processes.filter(p => p.state === 'Pronto');
-            if (readyProcs.length === 0) {
-                // Nenhum pronto -> CPU ociosa
+            // Se a fila de pronto estiver vazia, CPU ociosa
+            if (readyQueue.length === 0) {
                 runningProcess = null;
                 return;
             }
 
-            // Round Robin simples: pega o primeiro da fila
-            const next = readyProcs[0];
-            next.state = 'Executando';
-            next.remainingQuantum = quantum;
-            next.__justChanged = true;
-            runningProcess = next;
-            addLog(`Clock ${clock}: Escalonou P${next.pid} para EXECUTANDO.`);
-            showPopUpAtElement(cpuSection, `Agora P${next.pid} está em execução!`, 2500);
+            // Round Robin: pega o primeiro da fila
+            const nextPid = readyQueue.shift();
+            const proc = processes.find(p => p.pid === nextPid);
+            if (!proc) return; // algo deu errado, ou foi finalizado
+
+            proc.state = 'Executando';
+            proc.remainingQuantum = quantum;
+            proc.__justChanged = true;
+            runningProcess = proc;
+
+            addLog(`Clock ${clock}: Escalonou P${proc.pid} para EXECUTANDO.`);
+            showPopUpAtElement(cpuSection, `Agora P${proc.pid} está em execução!`, 2500);
         }
 
         function renderCurrentExec() {
             if (runningProcess) {
                 currentExec.textContent = `P${runningProcess.pid}`;
+                execInfo.textContent = `P${runningProcess.pid} (quantum=${runningProcess.remainingQuantum})`;
             } else {
                 currentExec.textContent = '-';
+                execInfo.textContent = '-';
             }
         }
 
