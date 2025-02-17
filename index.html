@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Simulador de Gerência de Processos (Responsivo)</title>
+    <!-- Tailwind CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+
+    <style>
+        /* Animação suave para destaque de célula de memória (blink) */
+        .blink {
+            animation: blink 1s ease-in-out 2;
+        }
+
+        @keyframes blink {
+
+            0%,
+            100% {
+                background-color: #fff3cd;
+            }
+
+            50% {
+                background-color: #ffe8a1;
+            }
+        }
+
+        /* Animação de destaque de linha (ex.: quando processo muda de estado) */
+        .row-highlight {
+            animation: rowHighlight 1.5s ease-in-out 2;
+        }
+
+        @keyframes rowHighlight {
+
+            0%,
+            100% {
+                background-color: #e0f7fa;
+            }
+
+            50% {
+                background-color: #b2ebf2;
+            }
+        }
+
+        /* Modal (tutorial) escondido inicialmente */
+        .modal-hidden {
+            display: none;
+        }
+
+        /* Fundo do modal (semi-transparente) */
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        /* Pop-up (balão) para eventos */
+        .event-popup {
+            position: absolute;
+            z-index: 9999;
+            background-color: #fff;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+            padding: 8px 12px;
+            font-size: 0.875rem;
+            line-height: 1.25;
+            transition: opacity 0.3s ease;
+            pointer-events: none;
+            /* para não atrapalhar cliques embaixo */
+        }
+
+        .event-popup::after {
+            content: '';
+            position: absolute;
+            width: 0;
+            height: 0;
+            border-left: 6px solid transparent;
+            border-right: 6px solid transparent;
+            border-bottom: 6px solid #fff;
+            top: -6px;
+            /* flechinha acima do pop-up */
+            left: 20px;
+        }
+
+        /* Ajustes de tabela e texto para telas muito pequenas */
+        @media(max-width: 640px) {
+            table {
+                font-size: 0.8rem;
+            }
+        }
+    </style>
+</head>
+
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- Container principal -->
+    <div class="max-w-7xl mx-auto py-6 px-4">
+
+        <!-- Cabeçalho -->
+        <header class="mb-6 text-center">
+            <h1 class="text-3xl font-bold mb-2">
+                Simulador de Gerência de Processos (Responsivo)
+            </h1>
+            <p class="text-sm text-gray-700 mb-2">
+                Crie processos, observe sua execução e gerenciamento de memória, agora adaptado para telas menores!
+            </p>
+            <!-- Botão que abre o modal de tutorial -->
+            <button id="openTutorialBtn" class="bg-blue-500 hover:bg-blue-600 text-white text-sm px-3 py-2 rounded"
+                title="Clique para ver um tutorial detalhado sobre o uso do simulador.">
+                Abrir Tutorial
+            </button>
+        </header>
+
+        <!-- Seção de Criação de Processos -->
+        <section class="bg-white rounded p-4 shadow mb-6">
+            <h2 class="text-xl font-semibold mb-3 flex items-center">
+                <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" stroke-width="2"
+                    viewBox="0 0 24 24">
+                    <path d="M12 4v16m8-8H4"></path>
+                </svg>
+                Criar Processos
+            </h2>
+            <form id="createForm" class="flex flex-wrap items-end space-x-4">
+                <div>
+                    <label for="processType" class="block text-sm font-medium mb-1">Tipo de Processo</label>
+                    <select id="processType" class="p-2 border rounded w-52"
+                        title="Selecione o tipo de processo (CPU-bound, I/O-bound, disco, fita, etc.).">
+                        <option value="CPU-bound">CPU-bound</option>
+                        <option value="I/O-bound (disco)">I/O-bound (disco)</option>
+                        <option value="I/O-bound (fita)">I/O-bound (fita)</option>
+                        <option value="I/O-bound (terminal)">I/O-bound (terminal)</option>
+                        <option value="CPU e I/O-bound (disco)">CPU e I/O-bound (disco)</option>
+                        <option value="CPU e I/O-bound (fita)">CPU e I/O-bound (fita)</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="priority" class="block text-sm font-medium mb-1">Prioridade</label>
+                    <input type="number" id="priority" class="p-2 border rounded w-20" min="0" max="10" value="5"
+                        title="Quanto maior a prioridade, maior a chance de execução em alguns escalonadores. Aqui ainda usamos Round Robin simplificado." />
+                </div>
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+                    title="Clique para criar um novo processo.">
+                    Criar
+                </button>
+            </form>
+            <p class="text-xs text-gray-500 mt-2">
+                * Exemplos: <strong>CPU-bound</strong> gasta muito tempo de CPU. <strong>I/O-bound</strong> pode entrar
+                em espera (E/S).
+            </p>
+        </section>
+
+        <!-- Grid principal (Processos, CPU, Memória) -->
+        <!-- Em telas maiores, 3 colunas. Em telas menores, 1 coluna (empilhado) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+            <!-- Gerência de Processos -->
+            <section class="bg-white p-4 rounded shadow relative overflow-x-auto" id="processSection"
+                title="Aqui você vê a lista de processos, seus estados e ações possíveis.">
+                <h2 class="text-xl font-semibold mb-3 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-blue-600" fill="none" stroke="currentColor" stroke-width="2"
+                        viewBox="0 0 24 24">
+                        <path d="M6 3v18M6 3h12a2 2 0 012 2v2a2 2 0 01-2 2H6m0 0h12m-6 4v10"></path>
+                    </svg>
+                    Gerência de Processos
+                </h2>
+                <!-- overflow-x-auto para permitir rolagem horizontal se a tabela for grande -->
+                <div class="w-full overflow-x-auto">
+                    <table class="min-w-full text-sm border">
+                        <thead>
+                            <tr class="bg-gray-200 text-gray-700">
+                                <th class="border px-2 py-1">PID</th>
+                                <th class="border px-2 py-1">Tipo</th>
+                                <th class="border px-2 py-1">Prio</th>
+                                <th class="border px-2 py-1">Estado</th>
+                                <th class="border px-2 py-1">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="processTable" class="text-center"></tbody>
+                    </table>
+                </div>
+
+                <!-- Legenda de cores dos estados -->
+                <div class="mt-3 text-xs text-gray-600 space-y-1">
+                    <p><span class="inline-block w-3 h-3 bg-green-100 border border-green-300 mr-1"></span>Pronto</p>
+                    <p><span class="inline-block w-3 h-3 bg-blue-100 border border-blue-300 mr-1"></span>Executando</p>
+                    <p><span class="inline-block w-3 h-3 bg-yellow-100 border border-yellow-300 mr-1"></span>Espera(I/O)
+                    </p>
+                    <p><span class="inline-block w-3 h-3 bg-gray-100 border border-gray-300 mr-1"></span>Suspenso</p>
+                    <p><span class="inline-block w-3 h-3 bg-red-100 border border-red-300 mr-1"></span>Finalizado</p>
+                </div>
+            </section>
+
+            <!-- Gerência de Processador -->
+            <section class="bg-white p-4 rounded shadow" id="cpuSection"
+                title="Controla o clock da CPU, mostra o processo em execução e permite modo automático.">
+                <h2 class="text-xl font-semibold mb-3 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-green-600" fill="none" stroke="currentColor" stroke-width="2"
+                        viewBox="0 0 24 24">
+                        <path d="M9 19V6h11M9 6l-3 3 3 3"></path>
+                    </svg>
+                    Gerência de Processador
+                </h2>
+
+                <!-- Informações do processador -->
+                <div class="flex flex-col space-y-2 mb-4">
+                    <div>
+                        <span class="font-bold">Clock:</span>
+                        <span id="clockValue" class="ml-1 text-blue-600">0</span>
+                    </div>
+                    <div>
+                        <span class="font-bold">Processo em Execução:</span>
+                        <span id="currentExec" class="ml-1 text-blue-600">-</span>
+                    </div>
+                </div>
+
+                <!-- Botões de controle do CPU (clock) -->
+                <div class="flex flex-wrap space-x-2 mb-4">
+                    <button id="stepBtn" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded"
+                        title="Avança o clock em 1 passo. O processo em execução (se existir) consumirá 1 tempo de CPU.">
+                        Avançar Clock
+                    </button>
+                    <button id="autoBtn" class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded"
+                        title="Ativa/Desativa o modo automático de avanço de clock.">
+                        Auto (liga/desliga)
+                    </button>
+                </div>
+
+                <p class="text-sm text-gray-600">
+                    * Round Robin (quantum = 3). Processos <em>I/O-bound</em> podem entrar em espera (I/O)
+                    aleatoriamente (~30%).
+                </p>
+            </section>
+
+            <!-- Gerência de Memória -->
+            <section class="bg-white p-4 rounded shadow overflow-x-auto" id="memorySection"
+                title="Mostra os 50 frames de memória. Cada processo ocupa 5 frames.">
+                <h2 class="text-xl font-semibold mb-3 flex items-center">
+                    <svg class="w-5 h-5 mr-2 text-purple-600" fill="none" stroke="currentColor" stroke-width="2"
+                        viewBox="0 0 24 24">
+                        <path
+                            d="M5 10c-1.11 0-2 .89-2 2s.89 2 2 2h3v2H5a4 4 0 110-8h3v2H5zm14 0h-3V8h3a4 4 0 110 8h-3v-2h3c1.11 0 2-.89 2-2s-.89-2-2-2z">
+                        </path>
+                    </svg>
+                    Gerência de Memória
+                </h2>
+                <!-- Scroll horizontal se precisar (em telas bem pequenas) -->
+                <div class="inline-block">
+                    <div class="grid grid-cols-10 gap-1 text-center text-xs" id="memoryGrid">
+                        <!-- Preenchido dinamicamente via JS -->
+                    </div>
+                </div>
+            </section>
+
+        </div><!-- fim do grid principal -->
+
+        <!-- Área de Log -->
+        <section class="bg-white p-4 mt-6 rounded shadow">
+            <h2 class="text-xl font-semibold mb-3 flex items-center">
+                <svg class="w-5 h-5 mr-2 text-gray-600" fill="none" stroke="currentColor" stroke-width="2"
+                    viewBox="0 0 24 24">
+                    <path d="M12 20h9"></path>
+                    <path d="M4 4h16v6H4z"></path>
+                    <path d="M4 14h16v6H4z"></path>
+                </svg>
+                Log de Eventos
+            </h2>
+            <div id="log" class="h-40 overflow-y-auto bg-gray-50 p-2 text-sm border rounded"
+                title="Exibe cada evento que ocorre no sistema (criação, escalonamento, E/S, finalização etc.).">
+            </div>
+        </section>
+    </div><!-- fim do container principal -->
+
+
+    <!-- MODAL de TUTORIAL (inicia escondido) -->
+    <div id="tutorialModal" class="modal-hidden fixed inset-0 z-50 flex items-center justify-center" aria-hidden="true">
+        <!-- Fundo semi-transparente -->
+        <div class="modal-backdrop absolute inset-0"></div>
+
+        <!-- Conteúdo do modal -->
+        <div class="relative bg-white w-11/12 max-w-2xl mx-auto p-6 rounded shadow-lg">
+            <h2 class="text-2xl font-bold mb-4">Tutorial Rápido</h2>
+            <ol class="list-decimal list-inside space-y-2 text-sm text-gray-700">
+                <li><strong>Criar um Processo</strong>: Selecione <em>Tipo</em>, defina <em>Prioridade</em> e clique em
+                    <strong>Criar</strong>. Cada processo criado ocupa 5 frames na memória.</li>
+                <li><strong>Estados de Processos</strong>: A tabela mostra PID, Tipo, Prioridade e Estado atual (Pronto,
+                    Executando, Espera, Suspenso ou Finalizado). A legenda ao lado explica as cores.</li>
+                <li><strong>Escalonamento Round Robin</strong>: Use <em>Avançar Clock</em> para simular 1 unidade de
+                    tempo. O processo em execução consome CPU. Após 3 passos (quantum = 3), outro processo é escalonado.
+                </li>
+                <li><strong>I/O-bound</strong>: Pode entrar em <em>Espera(I/O)</em> (~30% de chance a cada passo).</li>
+                <li><strong>Suspender</strong>: Força o processo a ficar em estado <em>Suspenso</em>.
+                    <strong>Prosseguir</strong> o traz de volta para <em>Pronto</em>.</li>
+                <li><strong>Finalizar</strong>: Termina o processo e libera seus frames de memória.</li>
+                <li><strong>Modo Automático</strong>: Clique em <em>Auto (liga/desliga)</em> para avançar o clock
+                    automaticamente a cada 1 segundo.</li>
+            </ol>
+            <button id="closeTutorialBtn" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                Fechar
+            </button>
+        </div>
+    </div>
+
+
+    <!-- Pop-up para eventos (balãozinho) -->
+    <div id="eventPopUp" class="event-popup" style="display:none;"></div>
+
+
+    <script>
+        // --------------------------------------------------
+        // Referências a elementos da página
+        // --------------------------------------------------
+        const processTable = document.getElementById('processTable');
+        const memoryGrid = document.getElementById('memoryGrid');
+        const logDiv = document.getElementById('log');
+        const clockValue = document.getElementById('clockValue');
+        const currentExec = document.getElementById('currentExec');
+
+        // Botões / Modal
+        const stepBtn = document.getElementById('stepBtn');
+        const autoBtn = document.getElementById('autoBtn');
+        const tutorialModal = document.getElementById('tutorialModal');
+        const openTutorialBtn = document.getElementById('openTutorialBtn');
+        const closeTutorialBtn = document.getElementById('closeTutorialBtn');
+
+        // Pop-up (balãozinho)
+        const eventPopUp = document.getElementById('eventPopUp');
+
+        // Seções que podemos destacar
+        const processSection = document.getElementById('processSection');
+        const cpuSection = document.getElementById('cpuSection');
+        const memorySection = document.getElementById('memorySection');
+
+        // --------------------------------------------------
+        // Variáveis de estado
+        // --------------------------------------------------
+        let processes = [];       // array de processos
+        let pidCounter = 1;       // gera PIDs
+        let clock = 0;            // clock global
+
+        // Memória (50 frames) => cada processo usa 5
+        const totalFrames = 50;
+        const framesPerProcess = 5;
+        let memory = new Array(totalFrames).fill(null);
+
+        // Round Robin
+        const quantum = 3;
+
+        // Processo em execução
+        let runningProcess = null;
+
+        // Modo automático
+        let autoMode = false;
+        let autoInterval = null;
+
+        // --------------------------------------------------
+        // Inicialização
+        // --------------------------------------------------
+        window.onload = () => {
+            renderMemory();
+        };
+
+        // --------------------------------------------------
+        // Eventos do modal (tutorial)
+        // --------------------------------------------------
+        openTutorialBtn.addEventListener('click', () => {
+            tutorialModal.classList.remove('modal-hidden');
+        });
+        closeTutorialBtn.addEventListener('click', () => {
+            tutorialModal.classList.add('modal-hidden');
+        });
+
+        // --------------------------------------------------
+        // Criação de Processos
+        // --------------------------------------------------
+        document.getElementById('createForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const type = document.getElementById('processType').value;
+            const priority = parseInt(document.getElementById('priority').value);
+
+            // Tenta alocar frames
+            if (!allocateFrames(pidCounter, framesPerProcess)) {
+                addLog(`Memória insuficiente para criar processo P${pidCounter}.`);
+                showPopUpAtElement(memorySection, "Memória cheia! Não foi possível criar o processo.", 3000);
+                return;
+            }
+
+            // Cria o processo
+            const newProcess = {
+                pid: pidCounter++,
+                type: type,
+                priority: priority,
+                state: 'Pronto',
+                cpuTime: 0,
+                remainingQuantum: quantum
+            };
+            processes.push(newProcess);
+
+            addLog(`Processo P${newProcess.pid} criado (Tipo: ${type}, Prioridade: ${priority}).`);
+            showPopUpAtElement(processSection, `Processo P${newProcess.pid} criado! Veja na tabela.`, 3000);
+            renderProcesses();
+        });
+
+        // --------------------------------------------------
+        // Funções de Memória
+        // --------------------------------------------------
+        function renderMemory() {
+            memoryGrid.innerHTML = '';
+            for (let i = 0; i < totalFrames; i++) {
+                const cell = document.createElement('div');
+                cell.classList = 'border h-6 flex items-center justify-center';
+                if (memory[i]) {
+                    cell.textContent = `P${memory[i]}`;
+                    cell.classList.add('bg-purple-100');
+                } else {
+                    cell.textContent = '';
+                    cell.classList.add('bg-white');
+                }
+                memoryGrid.appendChild(cell);
+            }
+        }
+
+        function allocateFrames(pid, qty) {
+            // Verifica se há espaço livre suficiente
+            let freeCount = 0;
+            for (let i = 0; i < totalFrames; i++) {
+                if (memory[i] === null) freeCount++;
+            }
+            if (freeCount < qty) return false; // não há espaço
+
+            // Aloca frames e faz piscar
+            let allocated = 0;
+            for (let i = 0; i < totalFrames && allocated < qty; i++) {
+                if (memory[i] === null) {
+                    memory[i] = pid;
+                    allocated++;
+
+                    // Destacar célula alocada
+                    const memoryCell = memoryGrid.children[i];
+                    if (memoryCell) {
+                        memoryCell.classList.add('blink');
+                        setTimeout(() => {
+                            memoryCell.classList.remove('blink');
+                        }, 2000);
+                    }
+                }
+            }
+            renderMemory();
+            return true;
+        }
+
+        function freeFrames(pid) {
+            for (let i = 0; i < totalFrames; i++) {
+                if (memory[i] === pid) {
+                    memory[i] = null;
+                    // Piscar para indicar liberação
+                    const memoryCell = memoryGrid.children[i];
+                    if (memoryCell) {
+                        memoryCell.classList.add('blink');
+                        setTimeout(() => {
+                            memoryCell.classList.remove('blink');
+                        }, 2000);
+                    }
+                }
+            }
+            renderMemory();
+        }
+
+        // --------------------------------------------------
+        // Renderização da Tabela de Processos
+        // --------------------------------------------------
+        function renderProcesses() {
+            processTable.innerHTML = '';
+            processes.forEach(p => {
+                const row = document.createElement('tr');
+
+                let stateClass = getStateColor(p.state);
+
+                row.innerHTML = `
+          <td class="border px-2 py-1">P${p.pid}</td>
+          <td class="border px-2 py-1">${p.type}</td>
+          <td class="border px-2 py-1">${p.priority}</td>
+          <td class="border px-2 py-1 ${stateClass}">${p.state}</td>
+          <td class="border px-2 py-1">
+            ${renderButtons(p)}
+          </td>
+        `;
+                processTable.appendChild(row);
+
+                // Se o processo acabou de mudar, destaca a linha
+                if (p.__justChanged) {
+                    row.classList.add('row-highlight');
+                    setTimeout(() => {
+                        row.classList.remove('row-highlight');
+                    }, 3000);
+                    p.__justChanged = false;
+                }
+            });
+        }
+
+        // Cores para cada estado do processo
+        function getStateColor(state) {
+            switch (state) {
+                case 'Pronto': return 'bg-green-100 text-green-800';
+                case 'Executando': return 'bg-blue-100 text-blue-800';
+                case 'Suspenso': return 'bg-gray-100 text-gray-800';
+                case 'Espera(I/O)': return 'bg-yellow-100 text-yellow-800';
+                case 'Finalizado': return 'bg-red-100 text-red-800';
+                default: return '';
+            }
+        }
+
+        // Botões de ação
+        function renderButtons(p) {
+            if (p.state === 'Finalizado') return '—';
+            const suspendBtn = `
+        <button
+          class="bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1 text-xs rounded mr-1"
+          onclick="suspendProcess(${p.pid})"
+          title="Suspende o processo, mudando-o para estado 'Suspenso'."
+        >
+          Suspender
+        </button>`;
+            const resumeBtn = `
+        <button
+          class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 text-xs rounded mr-1"
+          onclick="resumeProcess(${p.pid})"
+          title="Retoma o processo suspenso, voltando-o para 'Pronto'."
+        >
+          Prosseguir
+        </button>`;
+            const finishBtn = `
+        <button
+          class="bg-red-500 hover:bg-red-600 text-white px-2 py-1 text-xs rounded"
+          onclick="finishProcess(${p.pid})"
+          title="Finaliza o processo e libera memória."
+        >
+          Finalizar
+        </button>`;
+
+            if (p.state === 'Suspenso') {
+                return resumeBtn + finishBtn;
+            } else {
+                return suspendBtn + finishBtn;
+            }
+        }
+
+        // --------------------------------------------------
+        // Ações: Suspender / Prosseguir / Finalizar
+        // --------------------------------------------------
+        function suspendProcess(pid) {
+            const proc = processes.find(x => x.pid === pid);
+            if (!proc || proc.state === 'Finalizado') return;
+            if (proc.state !== 'Suspenso') {
+                proc.state = 'Suspenso';
+                proc.__justChanged = true;
+                addLog(`Processo P${proc.pid} foi SUSPENSO.`);
+                showPopUpAtElement(processSection, `P${proc.pid} agora está em 'Suspenso'`, 3000);
+                if (runningProcess && runningProcess.pid === pid) {
+                    runningProcess = null;
+                }
+            }
+            renderProcesses();
+        }
+
+        function resumeProcess(pid) {
+            const proc = processes.find(x => x.pid === pid);
+            if (!proc || proc.state === 'Finalizado') return;
+            if (proc.state === 'Suspenso') {
+                proc.state = 'Pronto';
+                proc.__justChanged = true;
+                addLog(`Processo P${proc.pid} voltou para PRONTO.`);
+                showPopUpAtElement(processSection, `P${proc.pid} está PRONTO novamente.`, 3000);
+            }
+            renderProcesses();
+        }
+
+        function finishProcess(pid) {
+            const proc = processes.find(x => x.pid === pid);
+            if (!proc || proc.state === 'Finalizado') return;
+            proc.state = 'Finalizado';
+            proc.__justChanged = true;
+            addLog(`Processo P${proc.pid} foi FINALIZADO.`);
+            showPopUpAtElement(processSection, `P${proc.pid} foi finalizado.`, 3000);
+            freeFrames(pid);
+            if (runningProcess && runningProcess.pid === pid) {
+                runningProcess = null;
+            }
+            renderProcesses();
+        }
+
+        // --------------------------------------------------
+        // Simulação de Clock e Escalonamento
+        // --------------------------------------------------
+        stepBtn.addEventListener('click', simulateStep);
+        autoBtn.addEventListener('click', toggleAuto);
+
+        function toggleAuto() {
+            autoMode = !autoMode;
+            if (autoMode) {
+                addLog('Modo AUTO ligado (avança 1 step por segundo).');
+                autoInterval = setInterval(simulateStep, 1000);
+            } else {
+                addLog('Modo AUTO desligado.');
+                clearInterval(autoInterval);
+            }
+        }
+
+        function simulateStep() {
+            clock++;
+            clockValue.textContent = clock;
+
+            // Se não temos processo rodando ou acabou o quantum
+            if (!runningProcess || runningProcess.state !== 'Executando' || runningProcess.remainingQuantum <= 0) {
+                scheduleNextProcess();
+            }
+
+            // Se temos um processo rodando, executa 1 passo
+            if (runningProcess) {
+                runningProcess.cpuTime++;
+                runningProcess.remainingQuantum--;
+                addLog(`Clock ${clock}: P${runningProcess.pid} executou 1 step (CPU-time=${runningProcess.cpuTime}).`);
+
+                // Se for I/O-bound (verificamos se tem "I/O-bound" na string)
+                if (isIOBound(runningProcess.type)) {
+                    // ~30% de chance de ir para espera
+                    if (Math.random() < 0.3) {
+                        runningProcess.state = 'Espera(I/O)';
+                        runningProcess.__justChanged = true;
+                        addLog(`P${runningProcess.pid} entrou em Espera (I/O).`);
+                        showPopUpAtElement(cpuSection, `P${runningProcess.pid} entrou em I/O!`, 3000);
+                        runningProcess = null;
+                    }
+                }
+            }
+
+            // Processos em Espera(I/O) podem voltar a Pronto (~30% de chance)
+            processes.forEach(p => {
+                if (p.state === 'Espera(I/O)') {
+                    if (Math.random() < 0.3) {
+                        p.state = 'Pronto';
+                        p.remainingQuantum = quantum;
+                        p.__justChanged = true;
+                        addLog(`P${p.pid} concluiu I/O e voltou a PRONTO.`);
+                        showPopUpAtElement(processSection, `P${p.pid} voltou de I/O para PRONTO.`, 3000);
+                    }
+                }
+            });
+
+            renderProcesses();
+            renderCurrentExec();
+        }
+
+        function scheduleNextProcess() {
+            // Se existe um processo rodando que ainda estava "Executando", volta pra "Pronto"
+            if (runningProcess && runningProcess.state === 'Executando') {
+                runningProcess.state = 'Pronto';
+                runningProcess.__justChanged = true;
+            }
+
+            // Pega todos os processos em estado "Pronto"
+            const readyProcs = processes.filter(p => p.state === 'Pronto');
+            if (readyProcs.length === 0) {
+                // Nenhum pronto -> CPU ociosa
+                runningProcess = null;
+                return;
+            }
+
+            // Round Robin simples: pega o primeiro da fila
+            const next = readyProcs[0];
+            next.state = 'Executando';
+            next.remainingQuantum = quantum;
+            next.__justChanged = true;
+            runningProcess = next;
+            addLog(`Clock ${clock}: Escalonou P${next.pid} para EXECUTANDO.`);
+            showPopUpAtElement(cpuSection, `Agora P${next.pid} está em execução!`, 2500);
+        }
+
+        function renderCurrentExec() {
+            if (runningProcess) {
+                currentExec.textContent = `P${runningProcess.pid}`;
+            } else {
+                currentExec.textContent = '-';
+            }
+        }
+
+        // Verifica se é I/O-bound (inclui "I/O-bound" no tipo)
+        function isIOBound(type) {
+            return type.includes("I/O-bound");
+        }
+
+        // --------------------------------------------------
+        // Log de Eventos
+        // --------------------------------------------------
+        function addLog(msg) {
+            const time = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${time}] ${msg}<br/>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        // --------------------------------------------------
+        // Função para mostrar pop-up (balão) em cima de um elemento
+        // --------------------------------------------------
+        function showPopUpAtElement(element, message, duration = 3000) {
+            // Pega posição do elemento
+            const rect = element.getBoundingClientRect();
+            // Centraliza o pop-up horizontalmente em relação ao elemento
+            const left = rect.left + (rect.width / 2) - 60; // 60 => metade da largura aproximada do pop-up
+            const top = rect.top - 40 + window.scrollY;    // 40 => altura do pop-up
+
+            eventPopUp.style.left = left + 'px';
+            eventPopUp.style.top = top + 'px';
+            eventPopUp.innerHTML = message;
+            eventPopUp.style.display = 'block';
+            eventPopUp.style.opacity = '1';
+
+            // Remove depois de "duration" ms
+            setTimeout(() => {
+                eventPopUp.style.opacity = '0';
+                setTimeout(() => {
+                    eventPopUp.style.display = 'none';
+                }, 300);
+            }, duration);
+        }
+    </script>
+</body>
+
+</html>
